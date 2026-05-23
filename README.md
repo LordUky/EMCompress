@@ -17,7 +17,7 @@
 </p>
 
 <p align="center">
-  <a href="https://arxiv.org/abs/XXXX.XXXXX"><img alt="arXiv" src="https://img.shields.io/badge/📄_arXiv-EMCompress-b31b1b"></a>
+  <a href="https://arxiv.org/abs/2508.21094"><img alt="arXiv" src="https://img.shields.io/badge/📄_arXiv-EMCompress-b31b1b"></a>
   <a href="https://huggingface.co/datasets/LordUky/EMCompress"><img alt="HF Dataset" src="https://img.shields.io/badge/🤗_Dataset-LordUky%2FEMCompress-FFD21E"></a>
   <a href="https://github.com/LordUky/EMCompress"><img alt="Project Page" src="https://img.shields.io/badge/🌐_Project_Page-EMCompress-blue"></a>
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/Code-MIT-green"></a>
