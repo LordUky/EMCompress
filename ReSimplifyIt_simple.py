@@ -12,10 +12,10 @@ import random
 import time
 import json
 
-from git_ignore import *
-from tvs_utils.utils import isodata_clustering, find_closest_to_centers, dprint
+from config import *
+from emc_utils.utils import isodata_clustering, find_closest_to_centers, dprint
 
-dataset = 'yc2tvs' # 'yc2tvs', 'activitynetqa', 'nextqa', 'nextoe'
+dataset = 'yc2emc' # 'yc2emc', 'activitynetqa', 'nextqa', 'nextoe'
 force_redo_this_dataset = True
 num_threads = 90
 
@@ -63,11 +63,11 @@ def pickout_and_jsonize(s):
         temp = json.loads(temp)
     return temp
 
-if not os.path.exists(TVS_save_path_simple):
+if not os.path.exists(EMC_save_path_simple):
     outputs = dict()
     outputs[dataset] = dict()
 else:
-    with open(TVS_save_path_simple, 'r') as f:
+    with open(EMC_save_path_simple, 'r') as f:
         outputs = json.load(f)
     if dataset not in outputs:
         outputs[dataset] = dict()
@@ -219,7 +219,7 @@ def thread_run():
             # handle "RuntimeError: dictionary changed size during iteration"
             try:
                 outputs[dataset][key] = output
-                with open(TVS_save_path_simple, 'w') as f:
+                with open(EMC_save_path_simple, 'w') as f:
                     json.dump(outputs, f)
                 break
             except:

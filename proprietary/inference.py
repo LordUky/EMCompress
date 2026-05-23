@@ -3,7 +3,7 @@ from typing import Dict, Optional, List
 import json
 import base64
 import os
-from git_ignore import *
+from config import *
 import sys
 import time
 from tqdm import tqdm
@@ -14,7 +14,7 @@ class ProPrietaryModelInterface:
         Initialize the GPT-4 API client. The API key is read from the environment
         variable OPENAI_API_KEY if not provided.
         """
-        self.api_key = openai_api_key # imported from git_ignore.py
+        self.api_key = openai_api_key # imported from config.py
         self.client = OpenAI(api_key=openai_api_key)
         self.model_name = model
         if not self.api_key:
@@ -116,8 +116,8 @@ class ProPrietaryModelInterface:
 
 
 model_names = ['gpt-4.1-mini', 'gpt-4o', 'gpt-4-turbo', 'o4-mini']
-dataset_names = ['yc2tvs', 'activitynetqa', 'nextoe']
-tvs_oneforall = json.load(open(TVS_save_path, 'r', encoding='utf-8'))
+dataset_names = ['yc2emc', 'activitynetqa', 'nextoe']
+emc_oneforall = json.load(open(EMC_save_path, 'r', encoding='utf-8'))
 
 
 for model_name in model_names:
@@ -132,15 +132,15 @@ for model_name in model_names:
             to_write[dataset_name] = dict()
         dataset_json_path = dataset_json_paths[dataset_name]
         dataset = json.load(open(dataset_json_path, 'r', encoding='utf-8'))
-        dataset_tvs = tvs_oneforall[dataset_name]
+        dataset_emc = emc_oneforall[dataset_name]
         
         for key in tqdm(dataset):
             if key in to_write[dataset_name]:
                 continue
             ori_dp = dataset[key]
-            tvs_dp = dataset_tvs[key]
+            emc_dp = dataset_emc[key]
             ori_question = ori_dp['question']
-            screened_question = tvs_dp['screened_question']
+            screened_question = emc_dp['screened_question']
             base64_screened = json.load(open(os.path.join(base64_screened_image_folder, dataset_name, f"{key}.json"), 'r', encoding='utf-8'))
             base64_screened_16_frames = [base64_screened[k] for k in base64_screened]
             base64_uniform = json.load(open(os.path.join(base64_uniform_image_folder, dataset_name, f"{key}.json"), 'r', encoding='utf-8'))
@@ -151,7 +151,7 @@ for model_name in model_names:
                 all_16_frames=base64_uniform_16_frames
             )
             print(response_control)
-            if tvs_dp["status"] == 'failed' or 'error' in str(base64_screened_16_frames):
+            if emc_dp["status"] == 'failed' or 'error' in str(base64_screened_16_frames):
                 response_treatment = response_control
                 cut_success = 'failed'
             else:

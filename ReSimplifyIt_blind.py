@@ -15,9 +15,9 @@ import threading
 
 from math import floor
 
-from git_ignore import *
-from tvs_utils.utils import *
-from tvs_utils.tools import load_video_raw, scatter_frame_indices_to_timestamp_ranges
+from config import *
+from emc_utils.utils import *
+from emc_utils.tools import load_video_raw, scatter_frame_indices_to_timestamp_ranges
 
 from transformers import AutoTokenizer, CLIPVisionModel, CLIPImageProcessor, CLIPProcessor, CLIPModel
 
@@ -28,14 +28,14 @@ processor = CLIPProcessor.from_pretrained("openai/clip-vit-large-patch14")
 clip_model.eval()
 
 
-class ReSimplifyIt_blind_Datapoint(TVS_Datapoint):
+class ReSimplifyIt_blind_Datapoint(EMC_Datapoint):
     def __init__(self, question, video_fname, videocaptionpath, vid_frame_rate, vid_duration, iframes_times, iframes_feats, vid_path):
         super().__init__(question, video_fname, videocaptionpath, vid_frame_rate, vid_duration, iframes_times, iframes_feats)
         self.vid_path = vid_path
 
     def build(self, question, video_fname, videocaptionpath, vid_frame_rate, vid_duration, iframes_times, iframes_feats, vid_path):
         self.question = question
-        self.resolution = None # this work is TVS not TSVS. Spatial counterpart leave to future work.
+        self.resolution = None # this work is EMC not TSVS. Spatial counterpart leave to future work.
         self.video_fname = video_fname
         self.videocaptionpath = videocaptionpath
         self.vid_frame_rate = vid_frame_rate
@@ -193,13 +193,13 @@ def get_response_not_modify_conversation(conversation, model=core_model):
     return response
 
 
-if os.path.exists(TVS_save_path_blind) and not force_redo:
-    to_write = json.load(open(TVS_save_path_blind))
+if os.path.exists(EMC_save_path_blind) and not force_redo:
+    to_write = json.load(open(EMC_save_path_blind))
 else:
     to_write = dict()
 
-yc2tvs = json.load(open(dataset_json_path))
-all_keys = list(yc2tvs.keys())
+yc2emc = json.load(open(dataset_json_path))
+all_keys = list(yc2emc.keys())
 
 
 for key in tqdm(all_keys):
@@ -211,7 +211,7 @@ for key in tqdm(all_keys):
     if key in to_write and not force_redo:
         continue
 
-    dp = yc2tvs[key]
+    dp = yc2emc[key]
 
     question = dp["question"]
     video_fname = dp["vid_fname"]
@@ -297,5 +297,5 @@ for key in tqdm(all_keys):
         "outcome": outcome,
     }
 
-    with open(TVS_save_path_blind, 'w') as f:
+    with open(EMC_save_path_blind, 'w') as f:
         json.dump(to_write, f)

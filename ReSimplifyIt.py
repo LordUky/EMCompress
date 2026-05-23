@@ -10,11 +10,11 @@ from math import floor
 import threading
 import time
 import sys
-from tvs_utils.utils import *
+from emc_utils.utils import *
 
-from git_ignore import openai_api_key
+from config import openai_api_key
 
-from git_ignore import *
+from config import *
 
 
 
@@ -176,7 +176,7 @@ def extract_dict_from_response(untrimmed_response):
 
 
 
-class ReSimplifyIt(TVS):
+class ReSimplifyIt(EMC):
     def __init__(self, datapoint):
 
         super().__init__(datapoint=datapoint)
@@ -269,20 +269,20 @@ class ReSimplifyIt(TVS):
     
     def run(self):
         while not self.terminate:
-            round = TVS_round(self)
+            round = EMC_round(self)
             round.run()
 
-class TVS_round():
-    def __init__(self, umbrella_tvs:ReSimplifyIt):
-        self.umbrella_tvs = umbrella_tvs
+class EMC_round():
+    def __init__(self, umbrella_emc:ReSimplifyIt):
+        self.umbrella_emc = umbrella_emc
 
-        self.init_cut_segment = umbrella_tvs.current_cut_segment
+        self.init_cut_segment = umbrella_emc.current_cut_segment
 
         self.launcher = Launcher(self)
         self.validator = Validator(self)
         self.viewer = Viewer(self)
 
-        self.input_question = umbrella_tvs.current_question
+        self.input_question = umbrella_emc.current_question
 
         self.latest_trial_modified_question_from_launcher = None
         self.latest_trial_editing_plan_from_launcher = None
@@ -296,13 +296,13 @@ class TVS_round():
     def run(self):
         while True:
             if self.trial_count > self.trial_max:
-                self.umbrella_tvs.terminate = True
+                self.umbrella_emc.terminate = True
                 break
 
             self.launcher.run()
 
             if self.launcher.trial_decision == "terminate":
-                self.umbrella_tvs.terminate = True
+                self.umbrella_emc.terminate = True
                 break
 
             elif self.launcher.trial_decision == "process":
@@ -317,18 +317,18 @@ class TVS_round():
                         "corresponding_failed_plan": self.launcher.trial_editing_plan,
                         "reason": self.latest_message_from_validator
                     }
-                    self.umbrella_tvs.failure_history.learn_lesson(lesson)
+                    self.umbrella_emc.failure_history.learn_lesson(lesson)
                     self.trial_count += 1
                 elif self.latest_decision_from_validator == "succeeded":
-                    physical_segment = self.umbrella_tvs.mapping_v2p_timestampssegments(list(self.validator.latest_message))
-                    self.umbrella_tvs.set_current_segment_and_update_length(physical_segment)
-                    self.umbrella_tvs.current_question = self.launcher.trial_modified_question
+                    physical_segment = self.umbrella_emc.mapping_v2p_timestampssegments(list(self.validator.latest_message))
+                    self.umbrella_emc.set_current_segment_and_update_length(physical_segment)
+                    self.umbrella_emc.current_question = self.launcher.trial_modified_question
                     breakthrough = {
                         "succeeded_modified_question": self.launcher.trial_modified_question,
                         "corresponding_succeeded_plan": self.launcher.trial_editing_plan
                     }
-                    self.umbrella_tvs.success_history.claim_breakthrough(breakthrough)
-                    self.umbrella_tvs.failure_history.refresh()
+                    self.umbrella_emc.success_history.claim_breakthrough(breakthrough)
+                    self.umbrella_emc.failure_history.refresh()
                     break
                 else:
                     raise ValueError("something is wrong.")
@@ -336,8 +336,8 @@ class TVS_round():
 
         
 class Launcher():
-    def __init__(self, umbrella_tvs_round:TVS_round):
-        self.umbrella_tvs_round = umbrella_tvs_round
+    def __init__(self, umbrella_emc_round:EMC_round):
+        self.umbrella_emc_round = umbrella_emc_round
 
         self.trial_decision = None
         self.trial_modified_question = None
@@ -348,7 +348,7 @@ class Launcher():
 
     def run(self):
         # [quesion_flag] [failure_history_flag]
-        ready_launcher_prompt = prompt_launcher.replace("[quesion_flag]", self.umbrella_tvs_round.input_question).replace("[failure_history_flag]", self.umbrella_tvs_round.umbrella_tvs.failure_history.to_str()).replace("[success_history_flag]", self.umbrella_tvs_round.umbrella_tvs.success_history.to_str())
+        ready_launcher_prompt = prompt_launcher.replace("[quesion_flag]", self.umbrella_emc_round.input_question).replace("[failure_history_flag]", self.umbrella_emc_round.umbrella_emc.failure_history.to_str()).replace("[success_history_flag]", self.umbrella_emc_round.umbrella_emc.success_history.to_str())
         dprint_prompt(ready_launcher_prompt)
 
         conversation = list()
@@ -365,20 +365,20 @@ class Launcher():
         if self.trial_decision == "terminate":
             return
         elif self.trial_decision == "process":
-            self.umbrella_tvs_round.validator.run()
-            self.validator_decision = self.umbrella_tvs_round.validator.latest_decision
-            self.validator_message = self.umbrella_tvs_round.validator.latest_message
+            self.umbrella_emc_round.validator.run()
+            self.validator_decision = self.umbrella_emc_round.validator.latest_decision
+            self.validator_message = self.umbrella_emc_round.validator.latest_message
         else:
             raise ValueError("launcher's decision out of control!")
 
 
 
 class Validator():
-    def __init__(self, umbrella_tvs_round:TVS_round):
-        self.umbrella_tvs_round = umbrella_tvs_round
+    def __init__(self, umbrella_emc_round:EMC_round):
+        self.umbrella_emc_round = umbrella_emc_round
 
         self.candidate_plan = None
-        self.video_length = self.umbrella_tvs_round.umbrella_tvs.current_videolength
+        self.video_length = self.umbrella_emc_round.umbrella_emc.current_videolength
 
         self.init_prompt_mode = "isodata"
 
@@ -387,9 +387,9 @@ class Validator():
 
 
     def run(self):
-        self.candidate_plan = self.umbrella_tvs_round.launcher.trial_editing_plan
+        self.candidate_plan = self.umbrella_emc_round.launcher.trial_editing_plan
         # [plan_flag] [video_length_flag] [sys_usr_split]
-        ready_validator_prompt = prompt_validator.replace("[plan_flag]", self.candidate_plan).replace("[video_length_flag]", str(floor(self.video_length))).replace("[frame_rate_flag]", str(floor(self.umbrella_tvs_round.umbrella_tvs.frame_rate))).replace('[initial_captions_flag]', self.get_initial_captions())
+        ready_validator_prompt = prompt_validator.replace("[plan_flag]", self.candidate_plan).replace("[video_length_flag]", str(floor(self.video_length))).replace("[frame_rate_flag]", str(floor(self.umbrella_emc_round.umbrella_emc.frame_rate))).replace('[initial_captions_flag]', self.get_initial_captions())
         ready_validator_prompt_sys, ready_validator_prompt_usr = ready_validator_prompt.split("[sys_usr_split]")
         dprint_prompt(ready_validator_prompt)
         newest_validator_prompt_usr = ready_validator_prompt_usr
@@ -407,28 +407,28 @@ class Validator():
             elif self.latest_decision == "failed":
                 break
             elif self.latest_decision == "view":
-                self.umbrella_tvs_round.viewer.run()
-                newest_validator_prompt_usr = self.umbrella_tvs_round.viewer.latest_message
+                self.umbrella_emc_round.viewer.run()
+                newest_validator_prompt_usr = self.umbrella_emc_round.viewer.latest_message
             else:
                 raise ValueError("validator's decision out of control!")
                 
 
     def get_initial_captions(self):
         num = 10
-        v_duration = self.umbrella_tvs_round.umbrella_tvs.current_videolength
+        v_duration = self.umbrella_emc_round.umbrella_emc.current_videolength
         if self.init_prompt_mode == 'uniform':
             sampled_vtimestamps = list(range(floor(v_duration)))[::floor(v_duration/num)][:num]
             sampled_vtimestamps = list(map(lambda x: x+floor(v_duration/(num*2)), sampled_vtimestamps))
-            sampled_ptimestamps = list(map(lambda x: self.umbrella_tvs_round.umbrella_tvs.mapping_v2p_singletimestamp(x), sampled_vtimestamps))
+            sampled_ptimestamps = list(map(lambda x: self.umbrella_emc_round.umbrella_emc.mapping_v2p_singletimestamp(x), sampled_vtimestamps))
         elif self.init_prompt_mode == 'isodata':
             fault_tolerance = 3
             while fault_tolerance > 0:
                 try:
-                    frame_feats = self.umbrella_tvs_round.umbrella_tvs.video_1fps_feat.float()
-                    iframe_feats = self.umbrella_tvs_round.umbrella_tvs.video_iframe_feats.float()
-                    iframe_times = self.umbrella_tvs_round.umbrella_tvs.video_iframes_times
-                    v_iframe_p_times = [t for t in iframe_times if any(start <= t <= end for start, end in self.umbrella_tvs_round.umbrella_tvs.current_cut_segment)]
-                    v_iframe_times = [self.umbrella_tvs_round.umbrella_tvs.mapping_p2v_singletimestamp(e) for e in v_iframe_p_times]
+                    frame_feats = self.umbrella_emc_round.umbrella_emc.video_1fps_feat.float()
+                    iframe_feats = self.umbrella_emc_round.umbrella_emc.video_iframe_feats.float()
+                    iframe_times = self.umbrella_emc_round.umbrella_emc.video_iframes_times
+                    v_iframe_p_times = [t for t in iframe_times if any(start <= t <= end for start, end in self.umbrella_emc_round.umbrella_emc.current_cut_segment)]
+                    v_iframe_times = [self.umbrella_emc_round.umbrella_emc.mapping_p2v_singletimestamp(e) for e in v_iframe_p_times]
                     v_iframe_feats = frame_feats[[floor(e) for e in iframe_times]]
                     assignments, centers = isodata_clustering(v_iframe_feats, num, min_intra_cossim_otherwise_split=0.85, max_inter_cossim_otherwise_merge=0.98, min_elements_per_cluster=max(1, round(len(v_iframe_feats)/50)), max_n_clusters=15, min_n_clusters=min(10, len(v_iframe_feats)))
                     # min_intra_cossim_otherwise_split: larger value more likely split
@@ -438,7 +438,7 @@ class Validator():
                     center_times = torch.tensor(list(map(lambda x: round(x, 2), v_iframe_times)))[indices_of_selected_key_iframes_in_iframes_tensor_sorted].tolist()
                     center_times = list(set(map(floor, center_times)))
                     sampled_vtimestamps = center_times
-                    sampled_ptimestamps = list(map(lambda x: self.umbrella_tvs_round.umbrella_tvs.mapping_v2p_singletimestamp(x), sampled_vtimestamps))
+                    sampled_ptimestamps = list(map(lambda x: self.umbrella_emc_round.umbrella_emc.mapping_v2p_singletimestamp(x), sampled_vtimestamps))
                     if len(sampled_vtimestamps) < 3:
                         raise ValueError("Too few frames in clustering result.")
                     break
@@ -449,30 +449,30 @@ class Validator():
                     if fault_tolerance <= 0:
                         sampled_vtimestamps = list(range(floor(v_duration)))[::floor(v_duration/num)][:num]
                         sampled_vtimestamps = list(map(lambda x: x+floor(v_duration/(num*2)), sampled_vtimestamps))
-                        sampled_ptimestamps = list(map(lambda x: self.umbrella_tvs_round.umbrella_tvs.mapping_v2p_singletimestamp(x), sampled_vtimestamps))
+                        sampled_ptimestamps = list(map(lambda x: self.umbrella_emc_round.umbrella_emc.mapping_v2p_singletimestamp(x), sampled_vtimestamps))
                         break
         else:
             raise ValueError("fuck")
         
-        captions = {str(sampled_vtimestamps[i]): self.umbrella_tvs_round.umbrella_tvs.all_frame_captions[str(sampled_ptimestamps[i])] for i in range(len(sampled_vtimestamps))}
+        captions = {str(sampled_vtimestamps[i]): self.umbrella_emc_round.umbrella_emc.all_frame_captions[str(sampled_ptimestamps[i])] for i in range(len(sampled_vtimestamps))}
         captions_str = str(captions)
 
         return captions_str
 
 
 class Viewer():
-    def __init__(self, umbrella_tvs_round:TVS_round):
-        self.umbrella_tvs_round = umbrella_tvs_round
+    def __init__(self, umbrella_emc_round:EMC_round):
+        self.umbrella_emc_round = umbrella_emc_round
 
         self.latest_decision = None
         self.latest_message = None
         self.latest_tool_output = None
 
-        self.video_length = self.umbrella_tvs_round.umbrella_tvs.current_videolength
+        self.video_length = self.umbrella_emc_round.umbrella_emc.current_videolength
 
 
     def run(self):
-        self.input_request = self.umbrella_tvs_round.validator.latest_message
+        self.input_request = self.umbrella_emc_round.validator.latest_message
 
         assert self.input_request is not None
         # [sys_usr_split] [validator_request_flag]
@@ -498,19 +498,19 @@ class Viewer():
                 raise ValueError("viewer's decision out of control!")
 
     def get_image_cap(self, virtual_timestamp:int):
-        physical_timestamp = self.umbrella_tvs_round.umbrella_tvs.mapping_v2p_singletimestamp(virtual_timestamp)
-        if physical_timestamp  > self.umbrella_tvs_round.umbrella_tvs.vid_physical_duration + 2:
+        physical_timestamp = self.umbrella_emc_round.umbrella_emc.mapping_v2p_singletimestamp(virtual_timestamp)
+        if physical_timestamp  > self.umbrella_emc_round.umbrella_emc.vid_physical_duration + 2:
             return "Error. This timestamp exceeds the video length."
-        key = str(round(max(0, min(physical_timestamp, self.umbrella_tvs_round.umbrella_tvs.vid_physical_duration - 1))))
-        caption = self.umbrella_tvs_round.umbrella_tvs.all_frame_captions[key]
+        key = str(round(max(0, min(physical_timestamp, self.umbrella_emc_round.umbrella_emc.vid_physical_duration - 1))))
+        caption = self.umbrella_emc_round.umbrella_emc.all_frame_captions[key]
         self.latest_tool_output = caption
         return caption
         
 
     def get_snippet_cap(self, virtual_start:int, virtual_end:int):
-        physical_start = self.umbrella_tvs_round.umbrella_tvs.mapping_v2p_singletimestamp(virtual_start)
-        physical_end = self.umbrella_tvs_round.umbrella_tvs.mapping_v2p_singletimestamp(virtual_end)
-        if physical_start  > self.umbrella_tvs_round.umbrella_tvs.vid_physical_duration + 2:
+        physical_start = self.umbrella_emc_round.umbrella_emc.mapping_v2p_singletimestamp(virtual_start)
+        physical_end = self.umbrella_emc_round.umbrella_emc.mapping_v2p_singletimestamp(virtual_end)
+        if physical_start  > self.umbrella_emc_round.umbrella_emc.vid_physical_duration + 2:
             self.latest_tool_output = "Error. The starting timestamp exceeds the video length. Please check your input."
             return
         caps = ""
@@ -534,7 +534,7 @@ class Viewer():
         self.latest_tool_output = get_response_not_modify_conversation(conversation, model=tool_model)+ "\n" + ext
 
     def scan(self, virtual_start:int, virtual_end:int):
-        print("Scanning video snippet from " + str(virtual_start) + "s to " + str(virtual_end) + "s..., current length is " + str(self.umbrella_tvs_round.umbrella_tvs.current_videolength) + "s")
+        print("Scanning video snippet from " + str(virtual_start) + "s to " + str(virtual_end) + "s..., current length is " + str(self.umbrella_emc_round.umbrella_emc.current_videolength) + "s")
         self.get_snippet_cap(virtual_start=virtual_start, virtual_end=virtual_end)
         print(self.latest_tool_output)
         
@@ -542,17 +542,17 @@ class Viewer():
 
         question = query
 
-        vid_allcap = self.umbrella_tvs_round.umbrella_tvs.all_frame_captions
+        vid_allcap = self.umbrella_emc_round.umbrella_emc.all_frame_captions
 
-        vid_fname = self.umbrella_tvs_round.umbrella_tvs.video_fname
+        vid_fname = self.umbrella_emc_round.umbrella_emc.video_fname
 
         k = init_n_clusters  # initialization of number of clusters, set it to appropriate value (e.g. 10)
 
         try:
-            all_iframes_times = self.umbrella_tvs_round.umbrella_tvs.video_iframes_times
-            all_iframes_features = self.umbrella_tvs_round.umbrella_tvs.video_iframes_feats
+            all_iframes_times = self.umbrella_emc_round.umbrella_emc.video_iframes_times
+            all_iframes_features = self.umbrella_emc_round.umbrella_emc.video_iframes_feats
 
-            filterd_p_iframe_times = [t for t in all_iframes_times if self.umbrella_tvs_round.umbrella_tvs.double_layer_in(t, self.umbrella_tvs.current_cut_segment) and t < all_iframes_features.shape[0]]
+            filterd_p_iframe_times = [t for t in all_iframes_times if self.umbrella_emc_round.umbrella_emc.double_layer_in(t, self.umbrella_emc.current_cut_segment) and t < all_iframes_features.shape[0]]
             filterd_iframe_features = all_iframes_features[[all_iframes_times.index(t) for t in filterd_p_iframe_times]]
             
             assignments, centers = isodata_clustering(filterd_iframe_features, k, min_intra_cossim_otherwise_split=0.85, max_inter_cossim_otherwise_merge=0.98, min_elements_per_cluster=max(1, round(len(all_iframes_features)/50)), max_n_clusters=max_num_clusters, min_n_clusters=min(min_num_clusters, len(all_iframes_features)))
@@ -564,10 +564,10 @@ class Viewer():
             center_p_times = sorted(list(set(map(int, center_p_times))))
 
         except:
-            center_v_times = list(range(floor(self.umbrella_tvs_round.umbrella_tvs.current_videolength)))[::round(floor(self.umbrella_tvs_round.umbrella_tvs.current_videolength)/k)]
-            center_p_times = list(map(lambda x: self.umbrella_tvs_round.umbrella_tvs.mapping_v2p_singletimestamp(x), center_v_times))
+            center_v_times = list(range(floor(self.umbrella_emc_round.umbrella_emc.current_videolength)))[::round(floor(self.umbrella_emc_round.umbrella_emc.current_videolength)/k)]
+            center_p_times = list(map(lambda x: self.umbrella_emc_round.umbrella_emc.mapping_v2p_singletimestamp(x), center_v_times))
 
-        d = {'frame caption at '+str(self.umbrella_tvs_round.umbrella_tvs.mapping_p2v_singletimestamp(k))+'s': vid_allcap[str(k)] for k in center_p_times}
+        d = {'frame caption at '+str(self.umbrella_emc_round.umbrella_emc.mapping_p2v_singletimestamp(k))+'s': vid_allcap[str(k)] for k in center_p_times}
 
         str_initial_captions = str(d)
 
@@ -593,7 +593,7 @@ class Viewer():
         initial_captions = str_initial_captions
 
 
-        initial_prompt = initial_prompt_template.replace("[initial_captions_flag]", initial_captions).replace("[frame_rate_flag]", str(round(self.umbrella_tvs_round.umbrella_tvs.frame_rate, 2))).replace("[duration_flag]", str(floor(self.umbrella_tvs_round.umbrella_tvs.current_videolength))).replace("[original_question_flag]", question)
+        initial_prompt = initial_prompt_template.replace("[initial_captions_flag]", initial_captions).replace("[frame_rate_flag]", str(round(self.umbrella_emc_round.umbrella_emc.frame_rate, 2))).replace("[duration_flag]", str(floor(self.umbrella_emc_round.umbrella_emc.current_videolength))).replace("[original_question_flag]", question)
         initial_prompt_sys = initial_prompt.split('[sys_usr_split]')[0]
         initial_prompt_usr = initial_prompt.split('[sys_usr_split]')[1]
 
@@ -625,7 +625,7 @@ class Viewer():
                     err_count += 1
                     yes = False
                     if err_count >= 10:
-                        j = {'decision': 'end', 'timestamps': np.linspace(0, floor(self.umbrella_tvs_round.umbrella_tvs.current_videolength), 11, dtype=int)[1:10:2].tolist()}
+                        j = {'decision': 'end', 'timestamps': np.linspace(0, floor(self.umbrella_emc_round.umbrella_emc.current_videolength), 11, dtype=int)[1:10:2].tolist()}
                         break
                 if yes:
                     conversation.append({"role": "assistant", "content": response})
@@ -636,7 +636,7 @@ class Viewer():
                 break
             else:
                 request = round(j["parameter"])
-                cap = vid_allcap[str(self.umbrella_tvs_round.umbrella_tvs.mapping_v2p_singletimestamp(int(request)))]
+                cap = vid_allcap[str(self.umbrella_emc_round.umbrella_emc.mapping_v2p_singletimestamp(int(request)))]
                 conversation.append({"role": "user", "content": cap})
         
 
@@ -644,7 +644,7 @@ class Viewer():
         
 
         if len(final_timestamps) == 0:
-            final_timestamps = np.linspace(0, floor(self.umbrella_tvs_round.umbrella_tvs.current_videolength), 11, dtype=int)[1:10:2].tolist()
+            final_timestamps = np.linspace(0, floor(self.umbrella_emc_round.umbrella_emc.current_videolength), 11, dtype=int)[1:10:2].tolist()
 
         selection_prompt_template = """
         You are a smart assistant to select one timestamp from a given list of video timestamps that is the most suitable one to contain the content of a natrual language query as accurate and informative as possible. Here, the query is: "[original_question_flag]". The list of timestamps for you to choose from is: [choices_flag]. The timestamps are all in the unit of second.
@@ -666,11 +666,11 @@ class Viewer():
         proposals_frame_captions = dict()
 
         for ts in final_timestamps:
-            proposals_frame_captions['frame caption at '+str(ts)+'s'] = vid_allcap[str(self.umbrella_tvs_round.umbrella_tvs.mapping_v2p_singletimestamp(ts))]
+            proposals_frame_captions['frame caption at '+str(ts)+'s'] = vid_allcap[str(self.umbrella_emc_round.umbrella_emc.mapping_v2p_singletimestamp(ts))]
 
         proposals_frame_captions = str(proposals_frame_captions)
 
-        selection_prompt = selection_prompt_template.replace("[frame_rate_flag]", str(round(self.umbrella_tvs_round.umbrella_tvs.frame_rate, 2))).replace("[proposals_frame_captions_flag]", proposals_frame_captions).replace("[duration_flag]", str(floor(self.umbrella_tvs_round.umbrella_tvs.current_videolength))).replace("[original_question_flag]", question).replace('[choices_flag]', str(final_timestamps))
+        selection_prompt = selection_prompt_template.replace("[frame_rate_flag]", str(round(self.umbrella_emc_round.umbrella_emc.frame_rate, 2))).replace("[proposals_frame_captions_flag]", proposals_frame_captions).replace("[duration_flag]", str(floor(self.umbrella_emc_round.umbrella_emc.current_videolength))).replace("[original_question_flag]", question).replace('[choices_flag]', str(final_timestamps))
         selection_prompt_sys = selection_prompt.split('[sys_usr_split]')[0]
         selection_prompt_usr = selection_prompt.split('[sys_usr_split]')[1]
 
@@ -713,7 +713,7 @@ class Viewer():
                 break
             else:
                 request = round(j["parameter"])
-                cap = vid_allcap[str(self.umbrella_tvs_round.umbrella_tvs.mapping_v2p_singletimestamp(int(request)))]
+                cap = vid_allcap[str(self.umbrella_emc_round.umbrella_emc.mapping_v2p_singletimestamp(int(request)))]
                 conversation.append({"role": "user", "content": cap})
         
 
@@ -737,7 +737,7 @@ class Viewer():
                 [sys_usr_split]Now let's begin!.
             ''' # [original_question_flag] [anchor_timestamp_flag] [frame_rate_flag] [duration_flag]
 
-            spread_prompt = spread_prompt_template.replace("[frame_rate_flag]", str(round(self.umbrella_tvs_round.umbrella_tvs.frame_rate, 2))).replace("[duration_flag]", str(floor(self.umbrella_tvs_round.umbrella_tvs.current_videolength))).replace("[original_question_flag]", question).replace('[anchor_timestamp_flag]', str(final_choice))
+            spread_prompt = spread_prompt_template.replace("[frame_rate_flag]", str(round(self.umbrella_emc_round.umbrella_emc.frame_rate, 2))).replace("[duration_flag]", str(floor(self.umbrella_emc_round.umbrella_emc.current_videolength))).replace("[original_question_flag]", question).replace('[anchor_timestamp_flag]', str(final_choice))
             spread_prompt_sys = spread_prompt.split('[sys_usr_split]')[0]
             spread_prompt_usr = spread_prompt.split('[sys_usr_split]')[1]
         else:
@@ -755,7 +755,7 @@ class Viewer():
                 [sys_usr_split]Now let's begin!
             ''' # [original_question_flag] [initial_captions_flag] [frame_rate_flag] [duration_flag]
 
-            spread_prompt = spread_prompt_template.replace("[frame_rate_flag]", str(round(self.umbrella_tvs_round.umbrella_tvs.frame_rate, 2))).replace("[duration_flag]", str(floor(self.umbrella_tvs_round.umbrella_tvs.frame_rate))).replace("[original_question_flag]", question).replace('[initial_captions_flag]', str(initial_captions))
+            spread_prompt = spread_prompt_template.replace("[frame_rate_flag]", str(round(self.umbrella_emc_round.umbrella_emc.frame_rate, 2))).replace("[duration_flag]", str(floor(self.umbrella_emc_round.umbrella_emc.frame_rate))).replace("[original_question_flag]", question).replace('[initial_captions_flag]', str(initial_captions))
             spread_prompt_sys = spread_prompt.split('[sys_usr_split]')[0]
             spread_prompt_usr = spread_prompt.split('[sys_usr_split]')[1]
 
@@ -788,7 +788,7 @@ class Viewer():
                     err_count += 1
                     yes = False
                     if err_count >= 10:
-                        j = {'decision': 'end', 'timestamps': [[0, floor(self.umbrella_tvs_round.umbrella_tvs.current_videolength)]]}
+                        j = {'decision': 'end', 'timestamps': [[0, floor(self.umbrella_emc_round.umbrella_emc.current_videolength)]]}
                         break
                 if yes:
                     conversation.append({"role": "assistant", "content": response})
@@ -799,20 +799,20 @@ class Viewer():
                 break
             else:
                 request = round(j["parameter"])
-                cap = vid_allcap[str(self.umbrella_tvs_round.umbrella_tvs.mapping_v2p_singletimestamp(int(request)))]
+                cap = vid_allcap[str(self.umbrella_emc_round.umbrella_emc.mapping_v2p_singletimestamp(int(request)))]
                 conversation.append({"role": "user", "content": cap})
         
         message = final_timestamps
         if message in ([[]], [], None) or type(final_timestamps) != list:
             message = 'localization failed.'
-            final_timestamps = [[0, self.umbrella_tvs_round.umbrella_tvs.current_videolength]]
+            final_timestamps = [[0, self.umbrella_emc_round.umbrella_emc.current_videolength]]
         
         self.latest_tool_output = str(message)
         return message
 
 
 class FailureHistory():
-    def __init__(self, umbrella_tvs_round:TVS_round):
+    def __init__(self, umbrella_emc_round:EMC_round):
         self.failure_history = list()
 
     def to_str(self):
@@ -826,7 +826,7 @@ class FailureHistory():
 
 
 class SuccessHistory():
-    def __init__(self, umbrella_tvs_round:TVS_round):
+    def __init__(self, umbrella_emc_round:EMC_round):
         self.success_history = list()
 
     def to_str(self):
@@ -847,12 +847,12 @@ tool_model = "gpt-3.5-turbo"
 force_redo = False
 
 
-if os.path.exists(TVS_save_path) and not force_redo:
-    to_write = json.load(open(TVS_save_path))
+if os.path.exists(EMC_save_path) and not force_redo:
+    to_write = json.load(open(EMC_save_path))
 else:
     to_write = dict()
 
-for dataset_name in ('yc2tvs', ):
+for dataset_name in ('yc2emc', ):
 
     if dataset_name in to_write and not force_redo:
         to_write_dataset = to_write[dataset_name]
@@ -863,7 +863,7 @@ for dataset_name in ('yc2tvs', ):
     all_keys = list(dataset.keys())
     pbar = tqdm(total=len(all_keys))
 
-    # class TVS_Datapoint():
+    # class EMC_Datapoint():
     #     def __init__(self, question, video_fname, videocaptionpath, vid_frame_rate, vid_duration, iframes_times, iframes_feats):
     #         self.question = question
     #         self.video_fname = video_fname
@@ -896,11 +896,11 @@ for dataset_name in ('yc2tvs', ):
             vid_iframe_times = json.load(open(iframes_times_save_path))[video_fname]
             vid_iframe_feats = vid_1fps_feat[[floor(e) for e in vid_iframe_times]]
 
-            datapoint = TVS_Datapoint(question, video_fname, videocaptionpath, vid_frame_rate, vid_duration, vid_iframe_times, vid_iframe_feats, vid_1fps_feat)
+            datapoint = EMC_Datapoint(question, video_fname, videocaptionpath, vid_frame_rate, vid_duration, vid_iframe_times, vid_iframe_feats, vid_1fps_feat)
 
-            tvs = ReSimplifyIt(datapoint)
-            tvs.run()
-            modified_question, output_timestamps = tvs.current_question, tvs.current_cut_segment
+            emc = ReSimplifyIt(datapoint)
+            emc.run()
+            modified_question, output_timestamps = emc.current_question, emc.current_cut_segment
 
             dprint(key, 'gt: ', dataset[key]['question'], dataset[key]['gt_timestamp'], dataset[key]["vid_duration"], dataset[key]['type'])
             dprint(key, modified_question, output_timestamps, '\n')
@@ -920,7 +920,7 @@ for dataset_name in ('yc2tvs', ):
 
             while True:
                 try:
-                    with open(TVS_save_path, 'w') as f:
+                    with open(EMC_save_path, 'w') as f:
                         json.dump(to_write, f)
                     break
                 except Exception as e:

@@ -6,7 +6,7 @@ import os
 from tqdm import tqdm
 from math import floor
 
-from git_ignore import iframes_times_save_path, video_folder_for_computing_iframe_times
+from config import iframes_times_save_path, video_folder_for_computing_iframe_times
 
 vid_folder = video_folder_for_computing_iframe_times
 save_path = iframes_times_save_path

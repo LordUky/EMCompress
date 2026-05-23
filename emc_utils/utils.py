@@ -1,15 +1,98 @@
 import cv2
-import torch
-from transformers import CLIPProcessor, CLIPModel
+import json
 from PIL import Image
-from decord import VideoReader, cpu
 import random
 import numpy as np
 import os
 from tqdm import tqdm
 import time
 
-debug_normal = False
+
+def load_test_split(dataset_dir):
+    """Load the test-split QA dict for a dataset.
+
+    Two file layouts are auto-detected from `<dataset_dir>/test_split.json`:
+      - External benchmarks (EgoSchema, LVBench, MLVU, Video-MME, ActivityNet-QA,
+        NExT-QA, NExT-OE): `test_split.json` is a dict {key: item} already in
+        the uniform schema (video_path, question, answer, options,
+        question_type, duration, ...).
+      - EMCompress benchmark: `test_split.json` is a list of keys; data lives
+        in `EMCompress.json` (master, 2754 items). The keys are joined against
+        the master, and EMCompress's native field names are aliased to match
+        the uniform schema (video_path / duration / question_type / options).
+        (`train_split.json` and `val_split.json` follow the same convention.)
+    """
+    with open(os.path.join(dataset_dir, "test_split.json")) as f:
+        content = json.load(f)
+    if isinstance(content, dict):
+        return content
+    # content is a key list — join with the master file in the same directory
+    return _join_with_master(dataset_dir, content)
+
+
+def _join_with_master(dataset_dir, keys):
+    """Join a list of keys with the master data file in dataset_dir.
+
+    Master file = the only .json in the directory that is not a *_split.json.
+    EMCompress items are schema-normalized to match the external benchmark layout.
+    """
+    master_candidates = [
+        f for f in os.listdir(dataset_dir)
+        if f.endswith('.json') and not f.endswith('_split.json')
+    ]
+    if len(master_candidates) != 1:
+        raise FileNotFoundError(
+            f"Expected exactly one master .json (not *_split.json) in {dataset_dir}, "
+            f"found {master_candidates}"
+        )
+    with open(os.path.join(dataset_dir, master_candidates[0])) as f:
+        main = json.load(f)
+    videos_dir = os.path.join(dataset_dir, "videos")
+    out = {}
+    for k in keys:
+        item = dict(main[k])
+        # Alias EMCompress-style fields to the uniform downstream schema
+        if "vid_fname" in item and "video_path" not in item:
+            item["video_path"] = os.path.join(videos_dir, item["vid_fname"])
+        if "vid_duration" in item and "duration" not in item:
+            item["duration"] = item["vid_duration"]
+        if "type" in item and "question_type" not in item:
+            item["question_type"] = item["type"]
+        item.setdefault("options", [])
+        out[k] = item
+    return out
+
+# Lazy imports for heavy dependencies
+torch = None
+CLIPProcessor = None
+CLIPModel = None
+VideoReader = None
+cpu = None
+
+def _ensure_torch():
+    global torch
+    if torch is None:
+        import torch as _torch
+        torch = _torch
+    return torch
+
+def _ensure_transformers():
+    global CLIPProcessor, CLIPModel
+    if CLIPProcessor is None:
+        from transformers import CLIPProcessor as _CLIPProcessor, CLIPModel as _CLIPModel
+        CLIPProcessor = _CLIPProcessor
+        CLIPModel = _CLIPModel
+    return CLIPProcessor, CLIPModel
+
+def _ensure_decord():
+    global VideoReader, cpu
+    if VideoReader is None:
+        from decord import VideoReader as _VideoReader, cpu as _cpu
+        VideoReader = _VideoReader
+        cpu = _cpu
+    return VideoReader, cpu
+
+debug_normal = True
 debug_prompt = True
 debug_viewer_subprompt = False
 debug_gptresponse = True
@@ -39,6 +122,7 @@ def dprint_gpt_response(*args, **kwargs):
         print('--------------------------------------------------------------')
 
 def load_video_raw(vis_path):
+    _ensure_torch()
     assert os.path.exists(vis_path)
 
     dprint('loading raw video from '+vis_path+'......')
@@ -59,6 +143,7 @@ def load_video_raw(vis_path):
 
 
 def extract_iframes_as_tensor(loaded_raw, iframes_times, meta):
+    _ensure_torch()
     dprint('extracting iframes as tensors......')
     total_frame_num = len(loaded_raw)
     duration = meta['duration']
@@ -82,6 +167,7 @@ def double_layer_IoU(listlist1, listlist2):
 
 
 def load_video_pt(vis_path):
+    _ensure_torch()
 
     cap = cv2.VideoCapture(vis_path)
     all_frames = []
@@ -108,9 +194,10 @@ def load_video_pt(vis_path):
     return torch.cat(all_frames)
 
 def load_video_1fps_feat(feature_path):
+    _ensure_torch()
     if not os.path.exists(feature_path):
         raise FileNotFoundError(f"Feature file {feature_path} does not exist.")
-    
+
     with open(feature_path, 'rb') as f:
         data = torch.load(f).cpu()
 
@@ -118,6 +205,7 @@ def load_video_1fps_feat(feature_path):
 
 
 def isodata_clustering(data, k_init, max_iterations=100, min_intra_cossim_otherwise_split=0.95, max_inter_cossim_otherwise_merge=0.98, max_n_clusters=15, min_n_clusters=1, max_center_shift=0.01, min_elements_per_cluster=1):
+    _ensure_torch()
     dprint('ISODATA clustering started......')
     # Normalize data for cosine similarity
     data_normalized = torch.nn.functional.normalize(data, p=2, dim=1)
@@ -226,6 +314,7 @@ def isodata_clustering(data, k_init, max_iterations=100, min_intra_cossim_otherw
 
 
 def find_closest_to_centers(data, centers, assignments):
+    _ensure_torch()
     dprint('finding original frames closest to center......')
     # Normalize data and centers for cosine similarity
     data_normalized = torch.nn.functional.normalize(data, p=2, dim=1)
@@ -255,7 +344,7 @@ def find_closest_to_centers(data, centers, assignments):
     # the returned values are not sorted yet
     return closest_indices
 
-class TVS_Datapoint():
+class EMC_Datapoint():
     def __init__(self, question, video_fname, videocaptionpath, vid_frame_rate, vid_duration, iframes_times, iframes_feats, vid_1fps_feat):
         self.question = question
         self.video_fname = video_fname
@@ -266,8 +355,8 @@ class TVS_Datapoint():
         self.iframes_feats = iframes_feats
         self.vid_1fps_feat = vid_1fps_feat
 
-class TVS():
-    def __init__(self, datapoint:TVS_Datapoint):
+class EMC():
+    def __init__(self, datapoint:EMC_Datapoint):
         self.current_question = datapoint.question
         self.video_fname = datapoint.video_fname
         self.videocaptionpath = datapoint.videocaptionpath
