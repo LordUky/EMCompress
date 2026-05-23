@@ -47,27 +47,9 @@ This repository provides:
 
 ## 🏗️ Framework
 
-ReSimplifyIt instantiates EMC as an iterative three-agent loop with multi-turn reasoning over key-frame captions:
-
-```
-                ┌──────────────┐
-   (V, Q) ────▶ │   Launcher   │  ─ propose trim instruction d (high-level)
-                └──────┬───────┘    + revised query qᵣ
-                       │
-                       ▼
-                ┌──────────────┐
-                │  Validator   │  ─ feasibility check via Viewer (no direct vision)
-                └──────┬───────┘    returns (dᵣ, mᵣ)
-                       │ spawns
-                       ▼
-                ┌──────────────┐
-                │    Viewer    │  ─ scan / localize / get_image_cap  (tool calls)
-                └──────────────┘    on captioned key-frames
-
-Trials are looped for R rounds; the final accepted (v, q) is returned.
-```
-
-Key-frames are extracted via a two-stage process: MPEG-4 I-frame extraction + modified ISODATA clustering on CLIP visual features. Each agent runs on **gpt-4o**.
+<p align="center">
+  <img src="assets/framework.png" alt="ReSimplifyIt framework: snapshot examples of two EMC rounds" width="100%">
+</p>
 
 See the paper for the full algorithm (Appendix D) and the EMCompress generation protocol (Appendix B).
 
@@ -131,14 +113,6 @@ torchrun --nproc_per_node=4 caption_all_videos.py --model Qwen/Qwen3-VL-32B-Inst
 torchrun --nproc_per_node=2 caption_all_videos.py --model llava-hf/llava-v1.6-mistral-7b-hf --skip_existing
 ```
 
-### Efficiency Analysis
-
-Aggregate Stage-1 trajectories into the efficiency tables reported in the paper:
-
-```bash
-python analyze_efficiency.py    # prints Table 1, Table 2, Table 3, Table 4
-```
-
 ## 📊 Headline Results
 
 EMC integration yields **relative gains of 7.33% in training and 33.7% in inference** for video-language understanding (see paper Table 2 / Table 3).
@@ -152,25 +126,6 @@ ReSimplifyIt also surpasses prior similar-task baselines by **0.40 F-1** on EMCo
 
 Full per-dataset / per-model numbers in the paper.
 
-## 📁 Repository Layout
-
-```
-EMCompress/
-├── run_emc_process.sh             ← Stage-1 entry (ReSimplifyIt simple + full)
-├── run_emc_guided_inference.sh    ← Stage-2 entry (downstream VideoQA × EMC on/off)
-├── run_caption.sh                 ← multi-GPU captioning wrapper
-├── run_emc_simple_baseline.py     ← single-agent EMC baseline
-├── run_emc_full_baseline.py       ← three-agent ReSimplifyIt
-├── new_video_qa_inference.py      ← downstream VideoQA inference (Stage 2)
-├── caption_all_videos.py          ← multi-backend VLM captioner
-├── ReSimplifyIt.py / _simple.py / _blind.py   ← core ReSimplifyIt framework
-├── proprietary/inference.py       ← OpenAI-API VideoQA baselines
-├── analyze_efficiency.py          ← Stage-1 efficiency tables
-├── analyze_results.py             ← Stage-2 accuracy tables
-├── emc_utils/                     ← shared utils: load_test_split, frame I/O, ISODATA
-└── preparation/save_iframetimes.py ← MPEG-4 I-frame timestamp extraction
-```
-
 ## 📝 Citation
 
 If you find this work useful, please cite:
@@ -182,17 +137,6 @@ If you find this work useful, please cite:
                Fung, Yi R. and Li, Manling and Ji, Heng},
   booktitle = {Findings of the Association for Computational Linguistics: ACL 2026},
   year      = {2026}
-}
-```
-
-Also cite the upstream YouCook2 dataset that EMCompress is built upon:
-
-```bibtex
-@inproceedings{zhou2018youcook2,
-  title     = {Towards Automatic Learning of Procedures from Web Instructional Videos},
-  author    = {Zhou, Luowei and Xu, Chenliang and Corso, Jason J.},
-  booktitle = {AAAI},
-  year      = {2018}
 }
 ```
 
