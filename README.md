@@ -29,7 +29,7 @@
 ## 📰 News
 
 - **2026.05** &nbsp; 🎉 EMCompress benchmark and reproduction code released on HuggingFace & GitHub.
-- **2026.04** &nbsp; 📝 Paper accepted to **ACL 2026 Findings**.
+- **2026.04** &nbsp; 📝 Paper accepted to **ACL 2026 Findings** 🔥.
 
 ## 🧠 Overview
 
@@ -44,6 +44,34 @@ This repository provides:
 1. 🧪 **ReSimplifyIt** — a strong EMC baseline framework (multi-agent: Launcher → Validator → Viewer).
 2. 📊 **EMCompress benchmark** — 2,754 cooking-domain QA samples (built on YouCook2) with both EMC-process and standard VideoQA labels.
 3. 🛠️ Two-stage reproduction pipeline (Stage 1: EMC process · Stage 2: EMC-guided downstream VideoQA).
+
+## 📐 Formulation
+
+We treat the ground-truth answer $A$ as a latent fact and the (video, query) pair $(V, Q) \sim p(V, Q \mid A)$ as an observation. Any compression $(V, Q) \mapsto (v, q)$ forms the Markov chain
+
+$$A \longrightarrow (V, Q) \longrightarrow (v, q),$$
+
+and the Data Processing Inequality bounds $\, I\!\big((v,q);\,A\big) \le I\!\big((V,Q);\,A\big)\,$ with equality iff $(v, q)$ is an $A$-sufficient statistic of $(V, Q)$. EMC seeks such a sufficient statistic under VideoQA-specific structural constraints, formalized as an endomorphic transformation
+
+$$F_{\mathrm{EMC}} \colon (V, Q) \;\longmapsto\; (v, q)$$
+
+over the original multimodal task space.
+
+**Admissibility conditions.**
+
+- **(C1) Structural Continuity.** $v$ is the concatenation of $n \ge 1$ non-overlapping contiguous sub-segments of $V$:
+
+$$v = \bigcup_{i=1}^{n} \{F_{s_i}, \ldots, F_{e_i}\} \subseteq V, \qquad 1 \le s_1 \le e_n \le T.$$
+
+- **(C2) Answer Sufficiency.** For any reasonable VideoQA agent $M$,
+
+$$M(q, v) = M(Q, V).$$
+
+**Minimality objectives.** Resolved via video-priority lexicographic optimization:
+
+$$(v^{\*}, q^{\*}) \;=\; \Big(\arg\min_{v\,:\,\exists q,\,(v,q)\in\mathcal{A}}\;\mathrm{Size}(v),\;\; \arg\min_{q\,:\,(v^{\*}, q)\in\mathcal{A}}\;\mathrm{Infer}(q)\Big).$$
+
+See paper §2 (and Appendix I) for the full derivation.
 
 ## 🏗️ Framework
 
